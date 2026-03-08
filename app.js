@@ -1,5 +1,6 @@
 const puppeteer = require('puppeteer');
 const fs = require('fs');
+const { create } = require('domain');
 
 // TODO: Load the credentials from the 'credentials.json' file
 // HINT: Use the 'fs' module to read and parse the file
@@ -57,10 +58,7 @@ const credentials = JSON.parse(fs.readFileSync('credentials.json'));
         
         await page.evaluate(() => {
           document.querySelectorAll('[class*="flash"]').forEach(el => el.remove());
-        })
-
-        // const html = await page.evaluate(() => document.body.innerHTML);
-        // require('fs').writeFileSync(`debug-${repo.replace('/', '-')}.html`, html);
+        });
 
         // TODO: Star the repository
         await page.waitForSelector('button[aria-label^="Star this repository"]', { visible: true , timeout: 10000 });
@@ -76,35 +74,70 @@ const credentials = JSON.parse(fs.readFileSync('credentials.json'));
         await page.screenshot({ path: `starred-${repo.replace('/', '-')}.png` });
         
     }
+  
+    await page.evaluate(() => {
+          document.querySelectorAll('[class*="flash"]').forEach(el => el.remove());
+        });
 
     // TODO: Navigate to the user's starred repositories page
-    await page.goto(`https://github.com/${actualUsername}?tab=stars`);
+    await page.goto(`https://github.com/${actualUsername}?tab=stars`, { waitUntil: 'networkidle2' });
+
+    await page.evaluate(() => {
+          document.querySelectorAll('[class*="flash"]').forEach(el => el.remove());
+        });
+
+    await page.screenshot({ path: 'stars-page.png' });
 
     // TODO: Click on the "Create list" button
-    await page.waitForSelector('button[data-testid="create-list-button"]');
+    // await page.waitForSelector('button[data-testid="create-list-button"]', { visible: true });
+
+    // const createListButton = await page.$('button[data-testedid="create-list-button"]');
+    // await createListButton.evaluate(element => element.scrollIntoView({ block: 'center' }));
+    // await createListButton.click();
+
+    // await page.screenshot({ path: 'afterclick1.png' });
+    // // Wait for modal & type list name
+    // await page.waitForSelector('.Overlay input[name="name"]', { visible: true });
+    // await page.type('.Overlay input[name="name"]', 'Node Libraries');
+
+    
+    // Identify and click the "Create" button
+    // const createModalButton = await page.$('.Overlay .Button--primary.Button--medium.Button');
+
+    await page.waitForSelector('button[data-testid="create-list-button"]', { visible: true, timeout: 10000 });
     await page.click('button[data-testid="create-list-button"]');
 
-    // TODO: Create a list named "Node Libraries"
-    // HINT: Wait for the input field and type the list name
-    await page.waitForSelector('input[name="name"]');
-    await page.type('input[name="name"]', 'Node Libraries');
+    // wait for the list name input
+    await page.waitForSelector('.Overlay input[name="name"]', { visible: true });
 
-    // Wait for buttons to become visible
-    await page.waitForTimeout(1000);
+    // type the list name
+    await page.type('.Overlay input[name="name"]', 'Node Libraries');
 
-    // Identify and click the "Create" button
-    const buttons = await page.$$('.Button--primary.Button--medium.Button');
+    const buttons = await page.$$('.Overlay button');
+
+    let createListButton = null;
+
     for (const button of buttons) {
-        const buttonText = await button.evaluate(node => node.textContent.trim());
-        if (buttonText === 'Create') {
-            await button.click();
-            break;
-        }
+      const text = await button.evaluate(el => el.innerText);
+      if (text.includes('Create')) {
+        createListButton = button;
+        break;
+      }
+    }
+
+    if (createListButton) {
+      await createListButton.evaluate(b => b.scrollIntoView({ block: 'center' }));
+      await createListButton.click();
+
+    } else {
+      console.error('Create button not found');
+      await page.screenshot({ path: 'create-list-fail.png' });
     }
 
     // Allow some time for the list creation process
-    await page.waitForTimeout(2000);
+    await new Promise(resolve => setTimeout(resolve, 2000));
 
+    // await new Promise(resolve => setTimeout(resolve, 1000));
     await page.screenshot({ path: 'created-list.png' });
 
     const dropdownSelector = 'summary[aria-label="Add to list"]';
@@ -114,27 +147,35 @@ const credentials = JSON.parse(fs.readFileSync('credentials.json'));
 
         // TODO: Add this repository to the "Node Libraries" list
         // HINT: Open the dropdown, wait for it to load, and find the list by its name
-        await page.waitForSelector(dropdownSelector);
-        await page.click(dropdownSelector);
-        await page.waitForTimeout(1000);
+        await page.waitForSelector(dropdownSelector, { visible: true });
+        
+        const dropdown = await page.$(dropdownSelector);
+        await dropdown.evaluate(element => element.scrollIntoView({ block: 'center'}));
+        await dropdown.click();
+
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
         const lists = await page.$$('.js-user-list-menu-form');
 
         for (const list of lists) {
-          const textHandle = await list.getProperty('innerText');
-          const text = await textHandle.jsonValue();
+          const text = await list.evaluate('innerText');
+
+          // const text = await textHandle.jsonValue();
           if (text.includes('Node Libraries')) {
-            await list.click();
-            break;
+              await list.evaluate(element => element.scrollIntoView({ block: 'center' }));
+              await list.click();
+              break;
           }
         }
 
         // Allow some time for the action to process
-        await page.waitForTimeout(1000);
+        await new Promise(resolve => setTimeout(resolve, 1000)); // This timeout helps ensure that the action is fully processed
 
         // Close the dropdown to finalize the addition to the list
-        await page.click(dropdownSelector);
+        await dropdown.click();
       }
       await page.screenshot({ path: 'added-to-list.png' });
     // Close the browser
+    
     await browser.close();
 })();
