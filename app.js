@@ -86,58 +86,43 @@ const credentials = JSON.parse(fs.readFileSync('credentials.json'));
           document.querySelectorAll('[class*="flash"]').forEach(el => el.remove());
         });
 
-    await page.screenshot({ path: 'stars-page.png' });
+    // wait for the stars page to fully load
+    await page.waitForSelector('body');
 
-    // TODO: Click on the "Create list" button
-    // await page.waitForSelector('button[data-testid="create-list-button"]', { visible: true });
+    // find the "Create list" button by text
+    const buttons = await page.$$('button, a, summary');
 
-    // const createListButton = await page.$('button[data-testedid="create-list-button"]');
-    // await createListButton.evaluate(element => element.scrollIntoView({ block: 'center' }));
-    // await createListButton.click();
-
-    // await page.screenshot({ path: 'afterclick1.png' });
-    // // Wait for modal & type list name
-    // await page.waitForSelector('.Overlay input[name="name"]', { visible: true });
-    // await page.type('.Overlay input[name="name"]', 'Node Libraries');
-
-    
-    // Identify and click the "Create" button
-    // const createModalButton = await page.$('.Overlay .Button--primary.Button--medium.Button');
-
-    await page.waitForSelector('button[data-testid="create-list-button"]', { visible: true, timeout: 10000 });
-    await page.click('button[data-testid="create-list-button"]');
-
-    // wait for the list name input
-    await page.waitForSelector('.Overlay input[name="name"]', { visible: true });
-
-    // type the list name
-    await page.type('.Overlay input[name="name"]', 'Node Libraries');
-
-    const buttons = await page.$$('.Overlay button');
-
-    let createListButton = null;
+    let createButton = null;
 
     for (const button of buttons) {
       const text = await button.evaluate(el => el.innerText);
-      if (text.includes('Create')) {
-        createListButton = button;
+      if (text && text.includes('Create list')) {
+        createButton = button;
         break;
       }
     }
 
-    if (createListButton) {
-      await createListButton.evaluate(b => b.scrollIntoView({ block: 'center' }));
-      await createListButton.click();
-
+    // click button
+    if (createButton) {
+      await createButton.evaluate(el => el.scrollIntoView());
+      await createButton.click();
     } else {
-      console.error('Create button not found');
-      await page.screenshot({ path: 'create-list-fail.png' });
+      console.log("Create list button not found");
+      await page.screenshot({ path: 'create-button-not-found.png' });
     }
 
-    // Allow some time for the list creation process
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    // wait for the modal input
+    await page.waitForSelector('#user_list_name', { visible: true });
 
-    // await new Promise(resolve => setTimeout(resolve, 1000));
+    // type list name
+    await page.type('#user_list_name', 'Node Libraries');
+
+    // click create
+    await page.waitForSelector('button[type="submit"]', { visible: true });
+    await page.click('button[type="submit"]');
+
+    await new Promise(resolve => setTimeout(resolve, 3000));
+
     await page.screenshot({ path: 'created-list.png' });
 
     const dropdownSelector = 'summary[aria-label="Add to list"]';
@@ -167,15 +152,14 @@ const credentials = JSON.parse(fs.readFileSync('credentials.json'));
               break;
           }
         }
+        await page.screenshot({ path: `put_in_list_name.png` });
+        // waiting
+        await new Promise(resolve => setTimeout(resolve, 1000)); 
 
-        // Allow some time for the action to process
-        await new Promise(resolve => setTimeout(resolve, 1000)); // This timeout helps ensure that the action is fully processed
-
-        // Close the dropdown to finalize the addition to the list
+        // close the dropdown if it's still open
         await dropdown.click();
       }
       await page.screenshot({ path: 'added-to-list.png' });
-    // Close the browser
-    
+    // close the browser 
     await browser.close();
 })();
